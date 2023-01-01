@@ -78,7 +78,7 @@ blueprint:
 
 mode: restart
 max_exceeded: silent
-e
+
 trigger:
   platform: state
   entity_id: !input motion_entity
