@@ -69,9 +69,9 @@ blueprint:
     nighttime_start:
       name: Nighttime start
       description: Time of day at which nighttime starts
-        # there is a bug which considers 22:00:00 as incorrect but prepending 0 somehow works
-        # https://github.com/home-assistant/frontend/issues/10822
-        # This is not just for 2 digit time though, 8:00:00 also doesn't work, and had to be 08:00:00
+      # there is a bug which considers 22:00:00 as incorrect but prepending 0 somehow works
+      # https://github.com/home-assistant/frontend/issues/10822
+      # This is not just for 2 digit time though, 8:00:00 also doesn't work, and had to be 08:00:00
       default: 022:00:00
       selector:
         time:
@@ -103,7 +103,11 @@ action:
   - choose:
     - conditions:
       - condition: template
-        value.template: '{{ now().time() >= strptime( nighttime_start, time_fmt).time() and now().time() < strptime( daytime_start, time_fmt ).time() }}'
+        value.template: |-
+          {{
+            now().time() >= strptime( nighttime_start, time_fmt).time() and
+            now().time() < strptime( daytime_start, time_fmt ).time()
+          }}
         sequence:
           - service: light.turn_on
             target:
