@@ -1,14 +1,19 @@
 blueprint:
   name: Hue-style motion automation
   description: Turn lights on when motion is detected and below a set lux level, with daytime/nightime luminance level
+  source_url: https://raw.githubusercontent.com/ArTourter/HA_Blueprints/main/automations/hue_style_motion.yaml
   domain: automation
   input:
+    # This list all the configurable options that the blueprint can take,
+    # including the default values if any.
     motion_entity:
+      # this is based on occupancy sensor, not motion sensor as newer hue
+      # sensors do not register a motion entity, only an occupancy entity. the
+      # older model has both.
+      # There doesn't seem to be a way of having a list of `device_class` so
+      # that both motion and occupancy sensors can be listed
       name: Motion Sensor
       selector:
-        entity:
-          domain: binary_sensor
-          device_class: motion
         entity:
           domain: binary_sensor
           device_class: occupancy
@@ -25,13 +30,12 @@ blueprint:
       selector:
         number:
           min: 0
-          max: 1000
+          max: 200
     light_target:
       name: Light
       selector:
         target:
           entity:
-            multiple: true
             domain: light
     no_motion_wait:
       name: Wait time
@@ -40,7 +44,7 @@ blueprint:
       selector:
         number:
           min: 0
-          max: 3600
+          max: 1800
           unit_of_measurement: seconds
     transition_time:
       name: Transition time
@@ -50,16 +54,16 @@ blueprint:
         number:
           min: 0
           max: 10
-          unit_of_measurement: seconds 
+          unit_of_measurement: seconds
     daytime_start:
       name: Daytime start
       description: Time of day at which daytime starts
-      default: 08:00:00
+      default: "08:00:00"
       selector:
         time:
     daytime_light_level:
       name: Daytime light level
-      description: Light level during daytime hours in percentage
+      description: Light brightness percentage level during daytime hours.
       default: 100
       selector:
         number:
@@ -72,12 +76,12 @@ blueprint:
       # there is a bug which considers 22:00:00 as incorrect but prepending 0 somehow works
       # https://github.com/home-assistant/frontend/issues/10822
       # This is not just for 2 digit time though, 8:00:00 also doesn't work, and had to be 08:00:00
-      default: 022:00:00
+      default: "022:00:00"
       selector:
         time:
     nighttime_light_level:
       name: Nighttime light level
-      description: Light level during nighttime hours in percentage
+      description: Light brightness percentage level during nighttime hours.
       default: 20
       selector:
         number:
@@ -85,52 +89,59 @@ blueprint:
           max: 100
           unit_of_measurement: percent
 
+# Using `restart` mode so that if motion is detected again while the automation
+# is active, the automation is cancelled and restarted. Then the lights will
+# not be turned off while motion/occupancy is detected within the waiting time.
+# https://www.home-assistant.io/docs/automation/modes/
 mode: restart
+# this option is probably not relevant in that mode as `max` is only valid in
+# `queued` and `parallel` modes, but it doesn't hurt
 max_exceeded: silent
 
 trigger:
+  # We trigger the automation on motion sensor activity
   platform: state
   entity_id: !input motion_entity
   from: "off"
   to: "on"
 
 condition:
-  numeric_state:
+  # we only trigger the automation if the illuminance level is below our threshold
+  - condition: numeric_state
     entity_id: !input lux_entity
     below: !input lux_level
 
 action:
-  - choose:
-    - conditions:
-      - condition: template
-        value.template: |-
-          {{
-            now().time() >= strptime( nighttime_start, time_fmt).time() and
-            now().time() < strptime( daytime_start, time_fmt ).time()
-          }}
-        sequence:
-          - service: light.turn_on
-            target:
-              entity_id: !input light_target
-            data:
-              brightness_pct: !input nighttime_light_level
-              transition: !input transition_time
-    default:
-      - service: light.turn_on
-        target:
-          entity_id: !input light_target
+  - if:
+      - alias: "If during night time"
+        condition: time
+        after: !input nighttime_start
+        before: !input daytime_start
+    then:
+      - alias: "Turn light on at night level"
+        service: light.turn_on
+        target: !input light_target
+        data:
+          brightness_pct: !input nighttime_light_level
+          transition: !input transition_time
+    else:
+      - alias: "Else turn light on at day level"
+        service: light.turn_on
+        target: !input light_target
         data:
           brightness_pct: !input daytime_light_level
           transition: !input transition_time
-
   - wait_for_trigger:
       platform: state
       entity_id: !input motion_entity
       from: "on"
       to: "off"
-  - delay: !input no_motion_wait
-  - service: light.turn_off
-    target:
-      entity_id: !input light_target
+  - alias: "Wait the number of seconds that has been set"
+    delay: !input no_motion_wait
+  - alias: "Turn off the light"
+    service: light.turn_off
+    target: !input light_target
     data:
       transition: !input transition_time
+
+# vim: ts=2 sw=2 et
