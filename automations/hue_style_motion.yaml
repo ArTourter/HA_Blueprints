@@ -44,8 +44,9 @@ blueprint:
       selector:
         number:
           min: 0
-          max: 1800
-          unit_of_measurement: seconds
+          max: 30
+          step: .5
+          unit_of_measurement: minutes
     transition_time:
       name: Transition time
       description: Time in seconds to reach desired state.
